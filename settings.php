@@ -2,6 +2,7 @@
 // This file is part of Moodle - http://moodle.org/
 
 /**
+ * Settings for auth_invitation.
  *
  * @package    auth_invitation
  * @copyright  2026 IDS Logic
@@ -19,7 +20,15 @@ if ($ADMIN->fulltree) {
         DAYSECS
     ));
 
-    $settings->add(new admin_setting_configtextarea(
+    $settings->add(new admin_setting_configtext(
+        'auth_invitation/emailsubject',
+        get_string('emailsubject', 'auth_invitation'),
+        get_string('emailsubject_desc', 'auth_invitation'),
+        get_string('defaultemailsubject', 'auth_invitation'),
+        PARAM_TEXT
+    ));
+
+    $settings->add(new admin_setting_confightmleditor(
         'auth_invitation/emailtemplate',
         get_string('emailtemplate', 'auth_invitation'),
         get_string('emailtemplate_desc', 'auth_invitation'),
@@ -50,26 +59,17 @@ if ($ADMIN->fulltree) {
         get_string('allowresend_desc', 'auth_invitation'),
         1
     ));
-
-    $settings->add(new admin_setting_configtext(
-        'auth_invitation/maxresend',
-        get_string('maxresend', 'auth_invitation'),
-        get_string('maxresend_desc', 'auth_invitation'),
-        5,
-        PARAM_INT
-    ));
 }
+    $ADMIN->add('authsettings', new admin_externalpage(
+        'authinvitationinvite',
+        get_string('invitepagetitle', 'auth_invitation'),
+        new moodle_url('/auth/invitation/invite.php'),
+        'auth/invitation:invite'
+    ));
 
-$ADMIN->add('authsettings', new admin_externalpage(
-    'authinvitationinvite',
-    get_string('invitepagetitle', 'auth_invitation'),
-    new moodle_url('/auth/invitation/invite.php'),
-    'auth/invitation:invite'
-));
-
-$ADMIN->add('authsettings', new admin_externalpage(
-    'authinvitationmanage',
-    get_string('managepagetitle', 'auth_invitation'),
-    new moodle_url('/auth/invitation/manage.php'),
-    'auth/invitation:invite'
-));
+    $ADMIN->add('authsettings', new admin_externalpage(
+        'authinvitationmanage',
+        get_string('managepagetitle', 'auth_invitation'),
+        new moodle_url('/auth/invitation/manage.php'),
+        'auth/invitation:invite'
+    ));
