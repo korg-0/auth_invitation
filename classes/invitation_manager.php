@@ -52,18 +52,22 @@ class invitation_manager {
         $record->lastname  = trim($formdata->lastname);
         $record->email     = $email;
 
-        $token = self::generate_token();
+        $timecreated = time();
+        $record->timecreated  = $timecreated;
+        $record->timemodified = $timecreated;
+
+        $token = self::generate_token($email, $timecreated);
         $record->token = self::hash_token($token);
 
         $expiryseconds = !empty($formdata->expirytime) ? (int) $formdata->expirytime
             : (int) get_config('auth_invitation', 'defaultexpiry');
-        $record->expirytime = time() + max($expiryseconds, MINSECS);
+        $record->expirytime = $timecreated + max($expiryseconds, MINSECS);
 
         $record->status        = self::STATUS_PENDING;
         $record->userid        = 0;
-        $record->timecreated   = time();
-        $record->timemodified  = time();
         $record->completedtime = 0;
+        $token = self::generate_token($record->firstname, $record->lastname, $record->email, $record->expirytime);
+        $record->token = self::hash_token($token);
 
         $invitationid = $DB->insert_record('auth_invitation', $record);
 
@@ -80,7 +84,11 @@ class invitation_manager {
             }
         }
 
-        self::send_invitation_email($invitationid, $token);
+        $temppassword = generate_password(10);
+        $record->temppassword = $temppassword;
+        $invitationid = $DB->insert_record('auth_invitation', $record);
+
+        self::send_invitation_email($invitationid, $token, $temppassword);
 
         return $invitationid;
     }
@@ -98,16 +106,21 @@ class invitation_manager {
             throw new \moodle_exception('cannotresend', 'auth_invitation');
         }
 
-        $token = self::generate_token();
-
-        $invitation->token        = self::hash_token($token);
-        $invitation->expirytime   = time() + (int) get_config('auth_invitation', 'defaultexpiry');
+        $now = time();
+        $invitation->expirytime   = $now + (int) get_config('auth_invitation', 'defaultexpiry');
         $invitation->status       = self::STATUS_PENDING;
-        $invitation->timemodified = time();
+        $invitation->timemodified = $now;
+
+        $token = self::generate_token($invitation->firstname, $invitation->lastname, $invitation->email, $invitation->expirytime);
+        $invitation->token = self::hash_token($token);
 
         $DB->update_record('auth_invitation', $invitation);
 
-        self::send_invitation_email($invitationid, $token);
+        $temppassword = generate_password(10);
+        $invitation->temppassword = $temppassword;
+        $DB->update_record('auth_invitation', $invitation);
+
+        self::send_invitation_email($invitationid, $token, $temppassword);
     }
 
     /**
@@ -122,14 +135,20 @@ class invitation_manager {
 
     /**
      *
-     * @param string $token raw (unhashed) token from the URL.
-     * @return \stdClass|false the invitation record, or false if not usable.
+     * @param string $firstname
+     * @param string $lastname
+     * @param string $email
+     * @param int $expirytime
+     * @param string $token
+     * @return \stdClass|false
      */
-    public static function validate_token(string $token) {
+    public static function validate_token(string $firstname, string $lastname, string $email, int $expirytime, string $token) {
         global $DB;
-
+        $expectedtoken = self::generate_token($firstname, $lastname, $email, $expirytime);
+        if (!hash_equals($expectedtoken, $token)) {
+            return false;
+        }
         $invitation = $DB->get_record('auth_invitation', ['token' => self::hash_token($token)]);
-
         if (!$invitation) {
             return false;
         }
@@ -166,6 +185,7 @@ class invitation_manager {
     }
 
     /**
+     *
      * @param int $invitationid
      * @return int[] course ids linked to this invitation.
      */
@@ -190,10 +210,11 @@ class invitation_manager {
             } catch (\Exception $e) {
                 error_log('auth_invitation: Enrolment notice for course ' . $courseid . ': ' . $e->getMessage());
             }
-            }
+        }
     }
 
     /**
+     *
      * @param int $userid
      * @param int $courseid
      * @return bool whether the user already has an active enrolment in the course.
@@ -207,6 +228,7 @@ class invitation_manager {
     }
 
     /**
+     *
      * @param string $email
      * @return bool whether a pending invitation already exists for this email.
      */
@@ -219,10 +241,20 @@ class invitation_manager {
     }
 
     /**
-     * @return string a cryptographically secure, single-use, unguessable token.
+     *
+     * @param string $firstname
+     * @param string $lastname
+     * @param string $email
+     * @param int $expirytime
+     * @return string
      */
-    protected static function generate_token(): string {
-        return bin2hex(random_bytes(32));
+    protected static function generate_token(string $firstname, string $lastname, string $email, int $expirytime): string {
+        global $CFG;
+        $secret = $CFG->passwordsaltmain ?? 'auth_invitation_default_salt';
+
+        $payload = $firstname . '|' . $lastname . '|' . $email . '|' . $expirytime;
+
+        return hash_hmac('sha256', $payload, $secret);
     }
 
     /**
@@ -238,13 +270,21 @@ class invitation_manager {
      *
      * @param int $invitationid
      * @param string $token raw token (not yet hashed) to embed in the registration link.
+     * @param string $temppassword temporary plain-text password generated for the invitee.
      */
-    protected static function send_invitation_email(int $invitationid, string $token): void {
+    protected static function send_invitation_email(int $invitationid, string $token, string $temppassword): void {
         global $DB;
 
         $invitation = $DB->get_record('auth_invitation', ['id' => $invitationid], '*', MUST_EXIST);
 
-        $registrationurl = new \moodle_url('/auth/invitation/register.php', ['token' => $token]);
+        $registrationurl = new \moodle_url('/auth/invitation/register.php', [
+            'firstname'  => $invitation->firstname,
+            'lastname'   => $invitation->lastname,
+            'email'      => $invitation->email,
+            'expirytime' => $invitation->expirytime,
+            'token'      => $token,
+        ]);
+
         $expirydate = userdate($invitation->expirytime, get_string('strftimedatetime', 'langconfig'));
         $sitename = format_string(get_site()->fullname);
 
@@ -253,17 +293,25 @@ class invitation_manager {
             '{{lastname}}'          => $invitation->lastname,
             '{{email}}'             => $invitation->email,
             '{{registration_link}}' => $registrationurl->out(false),
+            '{{temp_password}}'     => $temppassword,
             '{{expiry_date}}'       => $expirydate,
             '{{site_name}}'         => $sitename,
         ];
 
-        $body = strtr((string) get_config('auth_invitation', 'emailtemplate'), $placeholders);
-        $subject = get_string('invitationemailsubject', 'auth_invitation', ['sitename' => $sitename]);
+        $rawtemplate = (string) get_config('auth_invitation', 'emailtemplate');
+        $htmlbody = strtr($rawtemplate, $placeholders);
+        $textbody = html_to_text($htmlbody);
+
+        $rawsubject = (string) get_config('auth_invitation', 'emailsubject');
+        if (empty($rawsubject)) {
+            $rawsubject = get_string('defaultemailsubject', 'auth_invitation');
+        }
+        $subject = strtr($rawsubject, $placeholders);
 
         $touser = self::get_temp_recipient($invitation);
         $fromuser = \core_user::get_support_user();
 
-        email_to_user($touser, $fromuser, $subject, $body);
+        email_to_user($touser, $fromuser, $subject, $textbody, $htmlbody);
     }
 
     /**
@@ -273,19 +321,19 @@ class invitation_manager {
      */
     protected static function get_temp_recipient(\stdClass $invitation): \stdClass {
         $touser = new \stdClass();
-        $touser->id             = -1;
-        $touser->email          = $invitation->email;
-        $touser->firstname      = $invitation->firstname;
-        $touser->lastname       = $invitation->lastname;
+        $touser->id                = -1;
+        $touser->email             = $invitation->email;
+        $touser->firstname         = $invitation->firstname;
+        $touser->lastname          = $invitation->lastname;
         $touser->firstnamephonetic = '';
         $touser->lastnamephonetic  = '';
-        $touser->middlename     = '';
-        $touser->alternatename  = '';
-        $touser->maildisplay    = true;
-        $touser->mailformat     = 1;
-        $touser->auth           = 'invitation';
-        $touser->deleted        = 0;
-        $touser->suspended      = 0;
+        $touser->middlename        = '';
+        $touser->alternatename     = '';
+        $touser->maildisplay       = true;
+        $touser->mailformat        = 1;
+        $touser->auth              = 'invitation';
+        $touser->deleted           = 0;
+        $touser->suspended         = 0;
         return $touser;
     }
 }
