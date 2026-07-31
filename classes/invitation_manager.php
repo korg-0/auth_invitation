@@ -6,6 +6,7 @@ namespace auth_invitation;
 defined('MOODLE_INTERNAL') || die();
 
 /**
+ * Invitation manager class.
  *
  * @package    auth_invitation
  * @copyright  2026 IDS Logic
@@ -26,9 +27,10 @@ class invitation_manager {
     const STATUS_CANCELLED = 3;
 
     /**
+     * Create a new invitation record and send the invitation email.
      *
-     * @param \stdClass $formdata data submitted from \auth_invitation\form\invite_form.
-     * @return int id of the new auth_invitation record.
+     * @param \stdClass $formdata Data submitted from \auth_invitation\form\invite_form.
+     * @return int ID of the new auth_invitation record.
      */
     public static function create_invitation(\stdClass $formdata): int {
         global $DB, $CFG;
@@ -56,18 +58,24 @@ class invitation_manager {
         $record->timecreated  = $timecreated;
         $record->timemodified = $timecreated;
 
-        $token = self::generate_token($email, $timecreated);
-        $record->token = self::hash_token($token);
-
         $expiryseconds = !empty($formdata->expirytime) ? (int) $formdata->expirytime
             : (int) get_config('auth_invitation', 'defaultexpiry');
         $record->expirytime = $timecreated + max($expiryseconds, MINSECS);
 
+        $temppassword = generate_password(10);
+
+        $token = self::generate_token(
+            $record->firstname,
+            $record->lastname,
+            $record->email,
+            $record->expirytime,
+            $temppassword
+        );
+        $record->token = self::hash_token($token);
+
         $record->status        = self::STATUS_PENDING;
         $record->userid        = 0;
         $record->completedtime = 0;
-        $token = self::generate_token($record->firstname, $record->lastname, $record->email, $record->expirytime);
-        $record->token = self::hash_token($token);
 
         $invitationid = $DB->insert_record('auth_invitation', $record);
 
@@ -84,16 +92,13 @@ class invitation_manager {
             }
         }
 
-        $temppassword = generate_password(10);
-        $record->temppassword = $temppassword;
-        $invitationid = $DB->insert_record('auth_invitation', $record);
-
         self::send_invitation_email($invitationid, $token, $temppassword);
 
         return $invitationid;
     }
 
     /**
+     * Resend an existing invitation.
      *
      * @param int $invitationid
      */
@@ -111,19 +116,24 @@ class invitation_manager {
         $invitation->status       = self::STATUS_PENDING;
         $invitation->timemodified = $now;
 
-        $token = self::generate_token($invitation->firstname, $invitation->lastname, $invitation->email, $invitation->expirytime);
-        $invitation->token = self::hash_token($token);
-
-        $DB->update_record('auth_invitation', $invitation);
-
         $temppassword = generate_password(10);
-        $invitation->temppassword = $temppassword;
+
+        $token = self::generate_token(
+            $invitation->firstname,
+            $invitation->lastname,
+            $invitation->email,
+            $invitation->expirytime,
+            $temppassword
+        );
+
+        $invitation->token = self::hash_token($token);
         $DB->update_record('auth_invitation', $invitation);
 
         self::send_invitation_email($invitationid, $token, $temppassword);
     }
 
     /**
+     * Cancel an active invitation.
      *
      * @param int $invitationid
      */
@@ -134,20 +144,31 @@ class invitation_manager {
     }
 
     /**
+     * Validates plain-text URL parameters and token signature against DB.
      *
      * @param string $firstname
      * @param string $lastname
      * @param string $email
      * @param int $expirytime
+     * @param string $temppassword
      * @param string $token
      * @return \stdClass|false
      */
-    public static function validate_token(string $firstname, string $lastname, string $email, int $expirytime, string $token) {
+    public static function validate_token(
+        string $firstname,
+        string $lastname,
+        string $email,
+        int $expirytime,
+        string $temppassword,
+        string $token
+    ) {
         global $DB;
-        $expectedtoken = self::generate_token($firstname, $lastname, $email, $expirytime);
+
+        $expectedtoken = self::generate_token($firstname, $lastname, $email, $expirytime, $temppassword);
         if (!hash_equals($expectedtoken, $token)) {
             return false;
         }
+
         $invitation = $DB->get_record('auth_invitation', ['token' => self::hash_token($token)]);
         if (!$invitation) {
             return false;
@@ -168,6 +189,7 @@ class invitation_manager {
     }
 
     /**
+     * Mark an invitation as completed upon successful registration.
      *
      * @param int $invitationid
      * @param int $userid
@@ -185,9 +207,10 @@ class invitation_manager {
     }
 
     /**
+     * Get array of course IDs linked to an invitation.
      *
      * @param int $invitationid
-     * @return int[] course ids linked to this invitation.
+     * @return int[]
      */
     public static function get_invitation_courses(int $invitationid): array {
         global $DB;
@@ -196,6 +219,7 @@ class invitation_manager {
     }
 
     /**
+     * Auto-enrol user into designated courses.
      *
      * @param int $userid
      * @param int[] $courseids
@@ -214,10 +238,11 @@ class invitation_manager {
     }
 
     /**
+     * Helper to check active enrolment status.
      *
      * @param int $userid
      * @param int $courseid
-     * @return bool whether the user already has an active enrolment in the course.
+     * @return bool
      */
     protected static function is_user_enrolled(int $userid, int $courseid): bool {
         $context = \context_course::instance($courseid, IGNORE_MISSING);
@@ -228,9 +253,10 @@ class invitation_manager {
     }
 
     /**
+     * Helper to check if email has pending invites.
      *
      * @param string $email
-     * @return bool whether a pending invitation already exists for this email.
+     * @return bool
      */
     public static function has_pending_invitation(string $email): bool {
         global $DB;
@@ -241,23 +267,32 @@ class invitation_manager {
     }
 
     /**
+     * Generates a token signature over plain-text concatenated user metadata including temp password.
      *
      * @param string $firstname
      * @param string $lastname
      * @param string $email
      * @param int $expirytime
+     * @param string $temppassword
      * @return string
      */
-    protected static function generate_token(string $firstname, string $lastname, string $email, int $expirytime): string {
+    protected static function generate_token(
+        string $firstname,
+        string $lastname,
+        string $email,
+        int $expirytime,
+        string $temppassword
+    ): string {
         global $CFG;
         $secret = $CFG->passwordsaltmain ?? 'auth_invitation_default_salt';
 
-        $payload = $firstname . '|' . $lastname . '|' . $email . '|' . $expirytime;
+        $payload = $firstname . '|' . $lastname . '|' . $email . '|' . $expirytime . '|' . $temppassword;
 
         return hash_hmac('sha256', $payload, $secret);
     }
 
     /**
+     * Hash the raw token for database storage.
      *
      * @param string $token
      * @return string
@@ -267,10 +302,11 @@ class invitation_manager {
     }
 
     /**
+     * Build recipient object and send invitation email.
      *
      * @param int $invitationid
-     * @param string $token raw token (not yet hashed) to embed in the registration link.
-     * @param string $temppassword temporary plain-text password generated for the invitee.
+     * @param string $token
+     * @param string $temppassword
      */
     protected static function send_invitation_email(int $invitationid, string $token, string $temppassword): void {
         global $DB;
@@ -278,11 +314,12 @@ class invitation_manager {
         $invitation = $DB->get_record('auth_invitation', ['id' => $invitationid], '*', MUST_EXIST);
 
         $registrationurl = new \moodle_url('/auth/invitation/register.php', [
-            'firstname'  => $invitation->firstname,
-            'lastname'   => $invitation->lastname,
-            'email'      => $invitation->email,
-            'expirytime' => $invitation->expirytime,
-            'token'      => $token,
+            'firstname'    => $invitation->firstname,
+            'lastname'     => $invitation->lastname,
+            'email'        => $invitation->email,
+            'expirytime'   => $invitation->expirytime,
+            'temppassword' => $temppassword,
+            'token'        => $token,
         ]);
 
         $expirydate = userdate($invitation->expirytime, get_string('strftimedatetime', 'langconfig'));
@@ -315,6 +352,7 @@ class invitation_manager {
     }
 
     /**
+     * Create synthetic user profile for mailer recipient.
      *
      * @param \stdClass $invitation
      * @return \stdClass

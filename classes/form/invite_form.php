@@ -19,6 +19,7 @@ class invite_form extends \moodleform {
 
 
     public function definition() {
+        global $DB;
         $mform = $this->_form;
 
         $mform->addElement('text', 'firstname', get_string('firstname'));
@@ -37,14 +38,13 @@ class invite_form extends \moodleform {
         $mform->setDefault('expirytime', (int) get_config('auth_invitation', 'defaultexpiry'));
         $mform->addHelpButton('expirytime', 'expirytime', 'auth_invitation');
 
-        $courses = self::get_course_choices();
-        $select = $mform->addElement(
-            'autocomplete',
-            'courses',
-            get_string('courses', 'auth_invitation'),
-            $courses,
-            ['multiple' => true]
-        );
+        $options = $DB->get_records_menu('course', ['visible' => 1], 'fullname ASC', 'id, fullname');
+        unset($options[SITEID]);
+
+        $mform->addElement('autocomplete', 'courses', get_string('courses', 'auth_invitation'), $options, [
+            'multiple' => true,
+            'placeholder' => get_string('selectcourses', 'auth_invitation', 'Select courses...'),
+        ]);
         $mform->addHelpButton('courses', 'courses', 'auth_invitation');
 
         $defaultcourses = (string) get_config('auth_invitation', 'defaultcourses');

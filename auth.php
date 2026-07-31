@@ -2,6 +2,8 @@
 // This file is part of Moodle - http://moodle.org/
 
 /**
+ * Invitation authentication plugin.
+ *
  * @package    auth_invitation
  * @copyright  2026 IDS Logic
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -13,13 +15,16 @@ require_once($CFG->libdir . '/authlib.php');
 
 class auth_plugin_invitation extends auth_plugin_base {
 
-
+    /**
+     * Constructor.
+     */
     public function __construct() {
         $this->authtype = 'invitation';
         $this->config = get_config('auth_invitation');
     }
 
     /**
+     * Authenticate user using internal Moodle password hash.
      *
      * @param string $username
      * @param string $password plain text password.
@@ -39,6 +44,32 @@ class auth_plugin_invitation extends auth_plugin_base {
     }
 
     /**
+     * Pre-login hook executed before login processing begins.
+     * Useful for performing early redirects or checks before credentials are submitted.
+     */
+    public function prelogin_hook() {
+        // Core pre-login processing if needed.
+    }
+
+    /**
+     * Post-authentication hook executed immediately after successful login.
+     * Enforces the 'auth_forcepasswordchange' preference on session launch.
+     *
+     * @param \stdClass $user User record.
+     * @param string $username Username submitted.
+     * @param string $password Password submitted.
+     */
+    public function user_authenticated_hook(&$user, $username, $password) {
+        global $DB;
+
+        // If the user has the force password change flag enabled, set it on their record/session.
+        if (get_user_preferences('auth_forcepasswordchange', false, $user)) {
+            set_user_preference('auth_forcepasswordchange', 1, $user);
+        }
+    }
+
+    /**
+     * Declares internal authentication mechanism.
      *
      * @return bool
      */
@@ -47,6 +78,7 @@ class auth_plugin_invitation extends auth_plugin_base {
     }
 
     /**
+     * Allows local passwords.
      *
      * @return bool
      */
@@ -55,6 +87,7 @@ class auth_plugin_invitation extends auth_plugin_base {
     }
 
     /**
+     * Allows users to change their password.
      *
      * @return bool
      */
@@ -63,6 +96,7 @@ class auth_plugin_invitation extends auth_plugin_base {
     }
 
     /**
+     * Allows password resets.
      *
      * @return bool
      */
@@ -71,6 +105,7 @@ class auth_plugin_invitation extends auth_plugin_base {
     }
 
     /**
+     * Disallows manual account creation via UI settings if meant solely for invites.
      *
      * @return bool
      */
@@ -79,6 +114,7 @@ class auth_plugin_invitation extends auth_plugin_base {
     }
 
     /**
+     * Returns custom change password URL if overridden, null uses core.
      *
      * @return string|null
      */
@@ -87,6 +123,7 @@ class auth_plugin_invitation extends auth_plugin_base {
     }
 
     /**
+     * Identity provider list for login page.
      *
      * @param string $wantsurl
      * @return array

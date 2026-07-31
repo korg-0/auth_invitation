@@ -1,17 +1,53 @@
 <?php
 // This file is part of Moodle - http://moodle.org/
 
-/**
- * Settings for auth_invitation.
- *
- * @package    auth_invitation
- * @copyright  2026 IDS Logic
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 defined('MOODLE_INTERNAL') || die();
 
+if (!class_exists('admin_setting_course_autocomplete')) {
+    class admin_setting_course_autocomplete extends \admin_setting_configmultiselect {
+        public function output_html($data, $query = '') {
+            global $PAGE;
+            $PAGE->requires->js_call_amd('core/form-autocomplete', 'enhance', [
+                '#' . $this->get_id(),
+                true,
+                null,
+                get_string('searchcourses', 'core')
+            ]);
+            return parent::output_html($data, $query);
+        }
+    }
+}
+
+$ADMIN->add('authsettings', new admin_externalpage(
+    'auth_invitation_manage',
+    get_string('pluginname', 'auth_invitation'),
+    new moodle_url('/auth/invitation/manage.php'),
+    'moodle/site:config'
+));
+
+$ADMIN->add('authsettings', new admin_externalpage(
+    'auth_invitation_invite',
+    get_string('invitepagetitle', 'auth_invitation'),
+    new moodle_url('/auth/invitation/invite.php'),
+    'moodle/site:config'
+));
+
 if ($ADMIN->fulltree) {
+    global $DB;
+
+    $courseoptions = $DB->get_records_menu('course', ['visible' => 1], 'fullname ASC', 'id, fullname');
+    unset($courseoptions[SITEID]);
+    foreach ($courseoptions as $id => $fullname) {
+        $courseoptions[$id] = format_string($fullname);
+    }
+
+    $settings->add(new admin_setting_course_autocomplete(
+        'auth_invitation/defaultcourses',
+        get_string('defaultcourses', 'auth_invitation'),
+        get_string('defaultcourses_desc', 'auth_invitation'),
+        [],
+        $courseoptions
+    ));
 
     $settings->add(new admin_setting_configduration(
         'auth_invitation/defaultexpiry',
@@ -35,24 +71,6 @@ if ($ADMIN->fulltree) {
         get_string('defaultemailtemplate', 'auth_invitation')
     ));
 
-    $coursechoices = $DB->get_records_menu('course', ['visible' => 1], 'fullname ASC', 'id, fullname');
-    if (!empty($coursechoices)) {
-        unset($coursechoices[SITEID]);
-        foreach ($coursechoices as $id => $fullname) {
-            $coursechoices[$id] = format_string($fullname);
-        }
-    } else {
-        $coursechoices = [];
-    }
-
-    $settings->add(new admin_setting_configmulticheckbox(
-        'auth_invitation/defaultcourses',
-        get_string('defaultcourses', 'auth_invitation'),
-        get_string('defaultcourses_desc', 'auth_invitation'),
-        [],
-        $coursechoices
-    ));
-
     $settings->add(new admin_setting_configcheckbox(
         'auth_invitation/allowresend',
         get_string('allowresend', 'auth_invitation'),
@@ -60,16 +78,3 @@ if ($ADMIN->fulltree) {
         1
     ));
 }
-    $ADMIN->add('authsettings', new admin_externalpage(
-        'authinvitationinvite',
-        get_string('invitepagetitle', 'auth_invitation'),
-        new moodle_url('/auth/invitation/invite.php'),
-        'auth/invitation:invite'
-    ));
-
-    $ADMIN->add('authsettings', new admin_externalpage(
-        'authinvitationmanage',
-        get_string('managepagetitle', 'auth_invitation'),
-        new moodle_url('/auth/invitation/manage.php'),
-        'auth/invitation:invite'
-    ));

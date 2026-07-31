@@ -14,7 +14,7 @@ require_once($CFG->libdir . '/adminlib.php');
 use auth_invitation\form\invite_form;
 use auth_invitation\invitation_manager;
 
-admin_externalpage_setup('authinvitationinvite');
+admin_externalpage_setup('auth_invitation_invite');
 
 $returnurl = new moodle_url('/auth/invitation/manage.php');
 

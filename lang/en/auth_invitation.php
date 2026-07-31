@@ -33,16 +33,17 @@ $string['createddate'] = 'Created';
 $string['expirydate'] = 'Expires';
 $string['actions'] = 'Actions';
 $string['resend'] = 'Resend';
-$string['confirmcancel'] = 'Cancel this invitation? The invitee will no longer be able to use their registration link.';
-
-$string['statuspending'] = 'Pending';
+$string['revoke'] = 'Revoke';
+$string['confirmrevoke'] = 'Revoke this invitation? The invitee will no longer be able to use their registration link.';
+$string['invitationrevoked'] = 'Invitation revoked.';
+$string['statuspending']    = 'Pending';
 $string['statusregistered'] = 'Registered';
-$string['statusexpired'] = 'Expired';
-$string['statuscancelled'] = 'Cancelled';
-
+$string['statusexpired']    = 'Expired';
+$string['statuscancelled']  = 'Revoked';
+$string['statusrevoked']    = 'Revoked';
+$string['selectcourses'] = 'Select courses...';
 $string['invitationsent'] = 'Invitation sent.';
 $string['invitationresent'] = 'Invitation resent. The previous link is no longer valid.';
-$string['invitationcancelled'] = 'Invitation cancelled.';
 
 $string['invalidemail'] = 'Please enter a valid email address.';
 $string['emailexists'] = 'A Moodle account already exists with this email address.';
@@ -86,3 +87,9 @@ $string['privacy:metadata:auth_invitation:timecreated'] = 'The time the invitati
 $string['privacy:metadata:auth_invitation:completedtime'] = 'The time the invitee completed registration.';
 $string['privacy:metadata:invitationemail'] = 'The invitation email is sent via the site\'s configured email server.';
 $string['privacy:metadata:invitationemail:email'] = 'The invitee\'s email address, used to deliver the invitation.';
+$string['created'] = 'Created';
+$string['expires'] = 'Expires';
+$string['status']  = 'Status';
+$string['actions'] = 'Actions';
+$string['userinvitations'] = 'User invitations';
+$string['confirmresend'] = 'Are you sure you want to resend this invitation email?';
