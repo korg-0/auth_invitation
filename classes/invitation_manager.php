@@ -27,7 +27,6 @@ class invitation_manager {
     const STATUS_CANCELLED = 3;
 
     /**
-     * Create a new invitation record and send the invitation email.
      *
      * @param \stdClass $formdata Data submitted from \auth_invitation\form\invite_form.
      * @return int ID of the new auth_invitation record.
@@ -94,11 +93,16 @@ class invitation_manager {
 
         self::send_invitation_email($invitationid, $token, $temppassword);
 
+        \auth_invitation\event\invitation_sent::create([
+            'objectid' => $invitationid,
+            'context'  => \context_system::instance(),
+            'other'    => ['email' => $email],
+        ])->trigger();
+
         return $invitationid;
     }
 
     /**
-     * Resend an existing invitation.
      *
      * @param int $invitationid
      */
@@ -130,21 +134,34 @@ class invitation_manager {
         $DB->update_record('auth_invitation', $invitation);
 
         self::send_invitation_email($invitationid, $token, $temppassword);
+
+        \auth_invitation\event\invitation_resent::create([
+            'objectid' => $invitationid,
+            'context'  => \context_system::instance(),
+            'other'    => ['email' => $invitation->email],
+        ])->trigger();
     }
 
     /**
-     * Cancel an active invitation.
      *
      * @param int $invitationid
      */
     public static function cancel_invitation(int $invitationid): void {
         global $DB;
+
+        $invitation = $DB->get_record('auth_invitation', ['id' => $invitationid], '*', MUST_EXIST);
+
         $DB->set_field('auth_invitation', 'status', self::STATUS_CANCELLED, ['id' => $invitationid]);
         $DB->set_field('auth_invitation', 'timemodified', time(), ['id' => $invitationid]);
+
+        \auth_invitation\event\invitation_revoked::create([
+            'objectid' => $invitationid,
+            'context'  => \context_system::instance(),
+            'other'    => ['email' => $invitation->email],
+        ])->trigger();
     }
 
     /**
-     * Validates plain-text URL parameters and token signature against DB.
      *
      * @param string $firstname
      * @param string $lastname
@@ -189,7 +206,6 @@ class invitation_manager {
     }
 
     /**
-     * Mark an invitation as completed upon successful registration.
      *
      * @param int $invitationid
      * @param int $userid
@@ -204,10 +220,18 @@ class invitation_manager {
         $invitation->timemodified  = time();
 
         $DB->update_record('auth_invitation', $invitation);
+
+        if (class_exists('\auth_invitation\event\invitation_registered')) {
+            \auth_invitation\event\invitation_registered::create([
+                'objectid'      => $invitationid,
+                'relateduserid' => $userid,
+                'context'       => \context_system::instance(),
+                'other'         => ['email' => $invitation->email],
+            ])->trigger();
+        }
     }
 
     /**
-     * Get array of course IDs linked to an invitation.
      *
      * @param int $invitationid
      * @return int[]
@@ -219,7 +243,6 @@ class invitation_manager {
     }
 
     /**
-     * Auto-enrol user into designated courses.
      *
      * @param int $userid
      * @param int[] $courseids
@@ -238,7 +261,6 @@ class invitation_manager {
     }
 
     /**
-     * Helper to check active enrolment status.
      *
      * @param int $userid
      * @param int $courseid
@@ -253,7 +275,6 @@ class invitation_manager {
     }
 
     /**
-     * Helper to check if email has pending invites.
      *
      * @param string $email
      * @return bool
@@ -267,7 +288,6 @@ class invitation_manager {
     }
 
     /**
-     * Generates a token signature over plain-text concatenated user metadata including temp password.
      *
      * @param string $firstname
      * @param string $lastname
@@ -292,7 +312,6 @@ class invitation_manager {
     }
 
     /**
-     * Hash the raw token for database storage.
      *
      * @param string $token
      * @return string
@@ -302,7 +321,6 @@ class invitation_manager {
     }
 
     /**
-     * Build recipient object and send invitation email.
      *
      * @param int $invitationid
      * @param string $token
@@ -352,7 +370,6 @@ class invitation_manager {
     }
 
     /**
-     * Create synthetic user profile for mailer recipient.
      *
      * @param \stdClass $invitation
      * @return \stdClass
@@ -369,7 +386,7 @@ class invitation_manager {
         $touser->alternatename     = '';
         $touser->maildisplay       = true;
         $touser->mailformat        = 1;
-        $touser->auth              = 'invitation';
+        $touser->auth               = 'invitation';
         $touser->deleted           = 0;
         $touser->suspended         = 0;
         return $touser;

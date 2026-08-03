@@ -48,7 +48,6 @@ class auth_plugin_invitation extends auth_plugin_base {
      * Useful for performing early redirects or checks before credentials are submitted.
      */
     public function prelogin_hook() {
-        // Core pre-login processing if needed.
     }
 
     /**
@@ -62,7 +61,6 @@ class auth_plugin_invitation extends auth_plugin_base {
     public function user_authenticated_hook(&$user, $username, $password) {
         global $DB;
 
-        // If the user has the force password change flag enabled, set it on their record/session.
         if (get_user_preferences('auth_forcepasswordchange', false, $user)) {
             set_user_preference('auth_forcepasswordchange', 1, $user);
         }

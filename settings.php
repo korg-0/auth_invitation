@@ -18,17 +18,29 @@ if (!class_exists('admin_setting_course_autocomplete')) {
     }
 }
 
-$ADMIN->add('authsettings', new admin_externalpage(
+$ADMIN->add('users', new admin_category(
+    'auth_invitation_category',
+    get_string('userinvitations', 'auth_invitation')
+));
+
+$ADMIN->add('auth_invitation_category', new admin_externalpage(
     'auth_invitation_manage',
-    get_string('pluginname', 'auth_invitation'),
+    get_string('manageinvitations', 'auth_invitation'),
     new moodle_url('/auth/invitation/manage.php'),
     'moodle/site:config'
 ));
 
-$ADMIN->add('authsettings', new admin_externalpage(
+$ADMIN->add('auth_invitation_category', new admin_externalpage(
     'auth_invitation_invite',
     get_string('invitepagetitle', 'auth_invitation'),
     new moodle_url('/auth/invitation/invite.php'),
+    'moodle/site:config'
+));
+
+$ADMIN->add('auth_invitation_category', new admin_externalpage(
+    'auth_invitation_logs',
+    get_string('invitationlogs', 'auth_invitation'),
+    new moodle_url('/auth/invitation/logs.php'),
     'moodle/site:config'
 ));
 
